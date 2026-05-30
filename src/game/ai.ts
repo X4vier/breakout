@@ -66,7 +66,40 @@ export interface AiGameState {
  * bad — it's here so AI mode does *something* out of the box. Replace the body
  * with a real strategy (see the ideas at the top of this file).
  */
-export function chooseMove(_state: AiGameState): AiMove {
-  const moves: AiMove[] = ['left', 'right', 'none']
-  return moves[Math.floor(Math.random() * moves.length)]
+export function chooseMove(state: AiGameState): AiMove {
+  const { board, ball, paddle } = state
+  const paddleCenter = paddle.x + paddle.width / 2
+
+  // Where do we want the paddle's centre to be this frame?
+  let targetX: number
+
+  if (ball.vy <= 0) {
+    // Ball is heading up (or sitting still on the paddle before launch). We
+    // can't be hit yet, so just hover under the ball and stay ready.
+    targetX = ball.x
+  } else {
+    // Ball is descending — predict the x where it will reach the paddle's top
+    // edge, reflecting off the side walls along the way. The ball's centre is
+    // constrained to [radius, board.width - radius]; mirror the raw landing
+    // position back into that range to simulate bounces.
+    const distance = paddle.y - ball.y
+    const frames = distance / ball.vy
+    const rawX = ball.x + ball.vx * frames
+
+    const min = ball.radius
+    const max = board.width - ball.radius
+    const span = max - min
+
+    // Triangle-wave reflection into [min, max].
+    let folded = (rawX - min) % (2 * span)
+    if (folded < 0) folded += 2 * span
+    if (folded > span) folded = 2 * span - folded
+    targetX = min + folded
+  }
+
+  // Dead zone so the paddle doesn't jitter once it's basically lined up.
+  const deadZone = Math.max(4, paddle.width * 0.05)
+  if (targetX < paddleCenter - deadZone) return 'left'
+  if (targetX > paddleCenter + deadZone) return 'right'
+  return 'none'
 }
