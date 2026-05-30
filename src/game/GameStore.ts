@@ -1,4 +1,5 @@
 import { action, computed, makeObservable, observable } from 'mobx'
+import { chooseMove, type AiGameState } from './ai'
 import {
   BALL_R,
   BALL_SPEED,
@@ -70,6 +71,9 @@ export class GameStore {
   @observable status: GameStatus = 'ready'
   @observable score = 0
   @observable lives = START_LIVES
+
+  // When true, the paddle is driven by the AI (see ./ai.ts) instead of input.
+  @observable aiMode = false
 
   // Paddle: only its horizontal centre moves; everything else is fixed.
   @observable paddleX = (BOARD_W - PADDLE_W) / 2
@@ -148,6 +152,14 @@ export class GameStore {
     else if (this.status === 'paused') this.status = 'running'
   }
 
+  @action toggleAi() {
+    this.aiMode = !this.aiMode
+    // Hand control over cleanly: drop any keys the player was holding, and if
+    // we're switching on mid-pause, resume so the AI can actually play.
+    this.heldKeys.clear()
+    if (this.aiMode && this.status === 'paused') this.status = 'running'
+  }
+
   /** Centre the paddle on an x within the board (used by pointer control). */
   @action movePaddleTo(centerX: number) {
     this.paddleX = clamp(centerX - PADDLE_W / 2, 0, BOARD_W - PADDLE_W)
@@ -188,7 +200,13 @@ export class GameStore {
   }
 
   @action private step(dt: number) {
-    this.applyPaddleKeys(dt)
+    if (this.aiMode) {
+      // In AI mode the agent plays hands-free: serve automatically, then steer.
+      if (this.status === 'ready') this.launch()
+      this.applyAiMove(dt)
+    } else {
+      this.applyPaddleKeys(dt)
+    }
     if (this.status !== 'running') return
 
     const ball = this.ball
@@ -215,13 +233,48 @@ export class GameStore {
     let dir = 0
     if (this.heldKeys.has('ArrowLeft') || this.heldKeys.has('a')) dir -= 1
     if (this.heldKeys.has('ArrowRight') || this.heldKeys.has('d')) dir += 1
-    if (dir !== 0) {
-      this.paddleX = clamp(
-        this.paddleX + dir * PADDLE_SPEED * dt,
-        0,
-        BOARD_W - PADDLE_W,
-      )
-      if (this.status === 'ready') this.ball.x = this.paddleX + PADDLE_W / 2
+    this.movePaddleDir(dir, dt)
+  }
+
+  // Ask the AI which way to move and apply it, exactly like a key press.
+  private applyAiMove(dt: number) {
+    const move = chooseMove(this.aiSnapshot())
+    const dir = move === 'left' ? -1 : move === 'right' ? 1 : 0
+    this.movePaddleDir(dir, dt)
+  }
+
+  /** Shared paddle motion for both keyboard and AI control. */
+  private movePaddleDir(dir: number, dt: number) {
+    if (dir === 0) return
+    this.paddleX = clamp(
+      this.paddleX + dir * PADDLE_SPEED * dt,
+      0,
+      BOARD_W - PADDLE_W,
+    )
+    if (this.status === 'ready') this.ball.x = this.paddleX + PADDLE_W / 2
+  }
+
+  // Build the read-only state snapshot handed to the AI. Plain objects (not the
+  // live observables) so the AI can't accidentally mutate game state.
+  private aiSnapshot(): AiGameState {
+    return {
+      board: { width: BOARD_W, height: BOARD_H },
+      ball: {
+        x: this.ball.x,
+        y: this.ball.y,
+        vx: this.ball.vx,
+        vy: this.ball.vy,
+        radius: BALL_R,
+      },
+      paddle: { x: this.paddleX, y: PADDLE_Y, width: PADDLE_W, height: PADDLE_H },
+      bricks: this.bricks.map((b) => ({
+        x: b.x,
+        y: b.y,
+        w: b.w,
+        h: b.h,
+        alive: b.alive,
+      })),
+      score: this.score,
     }
   }
 

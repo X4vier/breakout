@@ -64,6 +64,20 @@ const Ball = observer(function Ball() {
   )
 })
 
+const AiToggle = observer(function AiToggle() {
+  return (
+    <button
+      type="button"
+      className={`ai-toggle${game.aiMode ? ' on' : ''}`}
+      aria-pressed={game.aiMode}
+      onClick={() => game.toggleAi()}
+    >
+      <span className="dot" aria-hidden="true" />
+      AI mode: {game.aiMode ? 'ON' : 'OFF'}
+    </button>
+  )
+})
+
 const Hud = observer(function Hud() {
   return (
     <div className="hud">
@@ -109,6 +123,7 @@ export const Breakout = observer(function Breakout() {
   // Map a pointer position to a board-space x and hand it to the store. The
   // board renders at a CSS-scaled size, so we rescale by the rendered width.
   const handlePointer = (clientX: number) => {
+    if (game.aiMode) return // the AI is driving — ignore the mouse
     const el = boardRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
@@ -132,6 +147,7 @@ export const Breakout = observer(function Breakout() {
           width: game.boardW,
           height: game.boardH,
           aspectRatio: `${game.boardW} / ${game.boardH}`,
+          cursor: game.aiMode ? 'default' : 'none',
         }}
         onPointerMove={(e) => handlePointer(e.clientX)}
         onClick={handleClick}
@@ -141,9 +157,12 @@ export const Breakout = observer(function Breakout() {
         <Ball />
         <Overlay />
       </div>
-      <p className="help">
-        Move: mouse or ← → / A D &nbsp;·&nbsp; Launch &amp; pause: Space
-      </p>
+      <div className="controls">
+        <AiToggle />
+        <p className="help">
+          Move: mouse or ← → / A D &nbsp;·&nbsp; Launch &amp; pause: Space
+        </p>
+      </div>
     </div>
   )
 })
