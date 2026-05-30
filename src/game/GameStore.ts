@@ -2,6 +2,8 @@ import { action, computed, makeObservable, observable } from 'mobx'
 import {
   BALL_R,
   BALL_SPEED,
+  BALL_SPEED_MAX,
+  BALL_SPEED_PER_POINT,
   BOARD_H,
   BOARD_W,
   BRICK_COLS,
@@ -97,6 +99,16 @@ export class GameStore {
     return this.bricks.reduce((n, b) => n + (b.alive ? 1 : 0), 0)
   }
 
+  // Speed scales with score and is re-applied to the velocity on launch and on
+  // every paddle hit, so the ball gets a little quicker as you rack up points
+  // (capped, and reset to base whenever the score resets via newGame).
+  @computed get ballSpeed(): number {
+    return Math.min(
+      BALL_SPEED + this.score * BALL_SPEED_PER_POINT,
+      BALL_SPEED_MAX,
+    )
+  }
+
   // --- lifecycle: called once by the view to wire up the loop + input ---
 
   start() {
@@ -125,8 +137,9 @@ export class GameStore {
     if (this.status !== 'ready') return
     // Fire upward at a slight, randomised angle so each serve differs.
     const angle = (Math.random() * 0.5 - 0.25) * Math.PI // ±45° from vertical
-    this.ball.vx = Math.sin(angle) * BALL_SPEED
-    this.ball.vy = -Math.abs(Math.cos(angle) * BALL_SPEED)
+    const speed = this.ballSpeed
+    this.ball.vx = Math.sin(angle) * speed
+    this.ball.vy = -Math.abs(Math.cos(angle) * speed)
     this.status = 'running'
   }
 
@@ -236,8 +249,9 @@ export class GameStore {
     // player can aim: centre → straight up, edges → sharp angle.
     const hit = (ball.x - (this.paddleX + PADDLE_W / 2)) / (PADDLE_W / 2) // -1..1
     const angle = hit * (Math.PI / 3) // up to ±60°
-    ball.vx = Math.sin(angle) * BALL_SPEED
-    ball.vy = -Math.abs(Math.cos(angle) * BALL_SPEED)
+    const speed = this.ballSpeed
+    ball.vx = Math.sin(angle) * speed
+    ball.vy = -Math.abs(Math.cos(angle) * speed)
     ball.y = PADDLE_Y - BALL_R
   }
 

@@ -10,7 +10,9 @@ export const PADDLE_Y = BOARD_H - 36 // top edge of the paddle
 export const PADDLE_SPEED = 9 // px per frame for keyboard control
 
 export const BALL_R = 8
-export const BALL_SPEED = 6 // px per frame, magnitude of the velocity vector
+export const BALL_SPEED = 6 // px per frame, the ball's speed at score 0
+export const BALL_SPEED_MAX = 11 // px per frame, the speed cap
+export const BALL_SPEED_PER_POINT = 0.0025 // extra px/frame gained per point scored
 
 export const BRICK_ROWS = 6
 export const BRICK_COLS = 11
