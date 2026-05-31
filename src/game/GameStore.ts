@@ -1,10 +1,12 @@
 import { action, computed, makeObservable, observable } from 'mobx'
 import { chooseMove, type AiGameState } from './ai'
 import {
+  BALL_MAX_SUBSTEP,
   BALL_R,
   BALL_SPEED,
   BALL_SPEED_MAX,
   BALL_SPEED_PER_POINT,
+  BALL_SPEED_PER_SECOND,
   BOARD_H,
   BOARD_W,
   BRICK_COLS,
@@ -82,6 +84,10 @@ export class GameStore {
 
   @observable bricks: Brick[] = buildBricks()
 
+  // Seconds of active play this game (only advances while running). Drives the
+  // time-based portion of the ball's speed.
+  @observable elapsed = 0
+
   // Geometry constants the view needs, exposed so components never import the
   // raw module-level numbers.
   readonly boardW = BOARD_W
@@ -103,12 +109,15 @@ export class GameStore {
     return this.bricks.reduce((n, b) => n + (b.alive ? 1 : 0), 0)
   }
 
-  // Speed scales with score and is re-applied to the velocity on launch and on
-  // every paddle hit, so the ball gets a little quicker as you rack up points
-  // (capped, and reset to base whenever the score resets via newGame).
+  // The ball's target speed, re-applied to the velocity on launch and on every
+  // paddle hit. It grows two ways: a little per point scored, and steadily with
+  // time played — so a long game keeps getting faster and faster. Resets with
+  // score + elapsed on newGame.
   @computed get ballSpeed(): number {
     return Math.min(
-      BALL_SPEED + this.score * BALL_SPEED_PER_POINT,
+      BALL_SPEED +
+        this.score * BALL_SPEED_PER_POINT +
+        this.elapsed * BALL_SPEED_PER_SECOND,
       BALL_SPEED_MAX,
     )
   }
@@ -132,6 +141,7 @@ export class GameStore {
   @action newGame() {
     this.score = 0
     this.lives = START_LIVES
+    this.elapsed = 0
     this.bricks = buildBricks()
     this.resetBall()
     this.status = 'ready'
@@ -209,23 +219,41 @@ export class GameStore {
     }
     if (this.status !== 'running') return
 
+    // dt is in 60fps frame units, so dt / 60 is the elapsed wall-clock seconds.
+    this.elapsed += dt / 60
+    this.advanceBall(dt)
+  }
+
+  // Move the ball and resolve collisions. The frame's movement is split into
+  // sub-steps no larger than BALL_MAX_SUBSTEP so that even a very fast ball
+  // checks for collisions often enough not to tunnel through bricks or paddle.
+  private advanceBall(dt: number) {
     const ball = this.ball
-    ball.x += ball.vx * dt
-    ball.y += ball.vy * dt
+    const dist = Math.hypot(ball.vx, ball.vy) * dt
+    const steps = Math.max(1, Math.ceil(dist / BALL_MAX_SUBSTEP))
+    const subDt = dt / steps
 
-    this.bounceWalls(ball)
-    this.bouncePaddle(ball)
-    this.bounceBricks(ball)
+    for (let i = 0; i < steps; i++) {
+      // Read velocity fresh each sub-step so a bounce mid-frame takes effect.
+      ball.x += ball.vx * subDt
+      ball.y += ball.vy * subDt
 
-    // Fell past the bottom edge → lose a life.
-    if (ball.y - BALL_R > BOARD_H) {
-      this.lives -= 1
-      if (this.lives <= 0) {
-        this.status = 'lost'
-      } else {
-        this.resetBall()
-        this.status = 'ready'
+      this.bounceWalls(ball)
+      this.bouncePaddle(ball)
+      this.bounceBricks(ball)
+
+      // Fell past the bottom edge → lose a life.
+      if (ball.y - BALL_R > BOARD_H) {
+        this.lives -= 1
+        if (this.lives <= 0) this.status = 'lost'
+        else {
+          this.resetBall()
+          this.status = 'ready'
+        }
+        return
       }
+      // Stop sub-stepping once the round is over (e.g. last brick cleared).
+      if (this.status !== 'running') return
     }
   }
 

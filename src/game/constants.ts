@@ -11,8 +11,15 @@ export const PADDLE_SPEED = 9 // px per frame for keyboard control
 
 export const BALL_R = 8
 export const BALL_SPEED = 6 // px per frame, the ball's speed at score 0
-export const BALL_SPEED_MAX = 11 // px per frame, the speed cap
 export const BALL_SPEED_PER_POINT = 0.0025 // extra px/frame gained per point scored
+export const BALL_SPEED_PER_SECOND = 0.04 // extra px/frame gained per second of active play
+// High safety cap reached only after a very long game; keeps the number sane
+// rather than meaningfully limiting the difficulty ramp.
+export const BALL_SPEED_MAX = 40
+// Max distance (px) the ball may travel between collision checks. Movement each
+// frame is split into sub-steps no larger than this so a fast ball can't tunnel
+// straight through a brick or the paddle.
+export const BALL_MAX_SUBSTEP = 4
 
 export const BRICK_ROWS = 6
 export const BRICK_COLS = 11
